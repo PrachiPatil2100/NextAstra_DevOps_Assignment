@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CRUD App — Tasks</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">CRUD App<span>create · read · update · delete</span></div>
+
+    <div class="who">
+      <div class="avatar" id="avatar" aria-hidden="true">–</div>
+      <div>
+        <div id="who-name">loading…</div>
+        <span class="role" id="who-role">–</span>
+      </div>
+      <button class="ghost" id="logout" type="button">Log out</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="stats">
+      <div class="tile"><div class="n" id="stat-total">0</div><div class="k">Total</div></div>
+      <div class="tile"><div class="n" id="stat-active">0</div><div class="k">Active</div></div>
+      <div class="tile"><div class="n" id="stat-done">0</div><div class="k">Completed</div></div>
+    </div>
+
+    <div class="banner" id="banner" role="status" aria-live="polite"></div>
+
+    <form class="add" id="add-form" autocomplete="off">
+      <label for="new-title" class="sr-only" hidden>New task</label>
+      <input type="text" id="new-title" placeholder="What needs doing?" maxlength="200" required />
+      <button type="submit" id="add-btn">Add</button>
+    </form>
+
+    <ul class="todos" id="list"></ul>
+
+    <div class="empty" id="empty" hidden>Nothing here yet — add your first task above.</div>
+
+    <div class="meta">
+      Signed in as <strong id="meta-user">–</strong> ·
+      Build <code id="build">…</code> · commit <code id="commit">…</code><br />
+      API: <code>/api/todos</code> · Health: <code>/healthz</code> · Metrics: <code>/metrics</code>
+    </div>
+  </main>
+
+<script src="/dashboard.js" defer></script>
+</body>
+</html>
