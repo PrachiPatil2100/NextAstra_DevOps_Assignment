@@ -1,0 +1,230 @@
+pipeline {
+    agent any
+
+    environment {
+
+        REPO_URL = "https://github.com/PrachiPatil2100/NextAstra_DevOps_Assignment.git"
+
+        APP_SOURCE = "app"
+
+        REMOTE_HOST = "3.88.39.160"
+        REMOTE_USER = "ubuntu"
+
+        REMOTE_APP = "/var/www/node-app"
+
+        APP_NAME = "node-app"
+
+        // DO NOT SET NODE_ENV HERE
+
+        HOST = "127.0.0.1"
+        PORT = "3000"
+        LOG_LEVEL = "info"
+
+        TOKEN_TTL = "1h"
+
+        ADMIN_USER = "admin"
+        DEV_USER = "developer"
+    }
+
+    stages {
+
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main', url: "${REPO_URL}"
+            }
+        }
+
+        stage('Verify Environment') {
+            steps {
+                sh '''
+                    node -v
+                    npm -v
+
+                    pwd
+
+                    ls -la
+
+                    ls -la ${APP_SOURCE}
+                '''
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                dir("${APP_SOURCE}") {
+                    sh '''
+                        npm ci
+                    '''
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                dir("${APP_SOURCE}") {
+                    sh '''
+                        npm test
+                    '''
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir("${APP_SOURCE}") {
+                    sh '''
+                        npm run build
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy') {
+
+            steps {
+
+                withCredentials([
+
+                    string(
+                        credentialsId: 'jwt-secret',
+                        variable: 'JWT_SECRET'
+                    ),
+
+                    string(
+                        credentialsId: 'admin-password',
+                        variable: 'ADMIN_PASSWORD'
+                    ),
+
+                    string(
+                        credentialsId: 'developer-password',
+                        variable: 'DEV_PASSWORD'
+                    )
+
+                ]) {
+
+                    sshagent(credentials: ['nginx-ec2-key']) {
+
+                        sh '''
+
+                        set -e
+
+                        echo "Testing SSH..."
+
+                        ssh \
+                          -o StrictHostKeyChecking=no \
+                          ${REMOTE_USER}@${REMOTE_HOST} hostname
+
+                        echo "Copying application..."
+
+                        rsync -az \
+                            --delete \
+                            --exclude=node_modules \
+                            --exclude=.git \
+                            --exclude=.env \
+                            --exclude=coverage \
+                            -e "ssh -o StrictHostKeyChecking=no" \
+                            ${APP_SOURCE}/ \
+                            ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP}/
+
+                        echo "Deploying..."
+
+                        ssh \
+                          -o StrictHostKeyChecking=no \
+                          ${REMOTE_USER}@${REMOTE_HOST} "
+
+                            set -e
+
+                            cd ${REMOTE_APP}
+
+                            if [ -f package-lock.json ]
+                            then
+                                npm ci --omit=dev
+                            else
+                                npm install --omit=dev
+                            fi
+
+                            export NODE_ENV=production
+                            export HOST='${HOST}'
+                            export PORT='${PORT}'
+                            export LOG_LEVEL='${LOG_LEVEL}'
+
+                            export JWT_SECRET='${JWT_SECRET}'
+                            export TOKEN_TTL='${TOKEN_TTL}'
+
+                            export ADMIN_USER='${ADMIN_USER}'
+                            export ADMIN_PASSWORD='${ADMIN_PASSWORD}'
+
+                            export DEV_USER='${DEV_USER}'
+                            export DEV_PASSWORD='${DEV_PASSWORD}'
+
+                            if pm2 describe ${APP_NAME} >/dev/null 2>&1
+                            then
+                                echo 'Restarting application...'
+                                pm2 restart ${APP_NAME} --update-env
+                            else
+                                echo 'Starting application...'
+                                pm2 start npm --name ${APP_NAME} -- start
+                            fi
+
+                            pm2 save
+
+                        "
+
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Health Check') {
+
+            steps {
+
+                sshagent(credentials: ['nginx-ec2-key']) {
+
+                    sh '''
+
+                    ssh \
+                    -o StrictHostKeyChecking=no \
+                    ${REMOTE_USER}@${REMOTE_HOST} "
+
+                        echo '========== PM2 =========='
+                        pm2 status
+
+                        echo '========== Port =========='
+                        ss -tulpn | grep 3000 || true
+
+                        echo '========== Health =========='
+                        curl -I http://localhost:3000 || true
+
+                        echo '========== NGINX =========='
+                        sudo nginx -t
+
+                    "
+
+                    '''
+                }
+            }
+        }
+
+    }
+
+    post {
+
+        success {
+            echo "===================================="
+            echo "Deployment Successful"
+            echo "===================================="
+        }
+
+        failure {
+            echo "===================================="
+            echo "Deployment Failed"
+            echo "===================================="
+        }
+
+        always {
+            cleanWs()
+        }
+    }
+}
